@@ -28,7 +28,7 @@ module PuppetX
       end
     end
 
-    def ldap_config(String host)
+    def ldap_config(host)
       # Load the configuration variables from Puppet
       required_vars = [
         :ldapport
