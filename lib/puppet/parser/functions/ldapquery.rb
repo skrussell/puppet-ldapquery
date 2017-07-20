@@ -8,24 +8,29 @@
 #
 require_relative '../../../puppet_x/ldapquery'
 
-begin
-  require 'net/ldap'
-rescue
-  Puppet.warn('Missing net/ldap gem required for ldapquery() function')
-end
+Puppet::Functions.create_function(:'ldapquery') do
+	confine :feature => :netldap
 
-Puppet::Parser::Functions.newfunction(:ldapquery,
-                                      type: :rvalue) do |args|
+	local_types do
+		type 'Ldapscope = Enum[base, one, sub]'
+	end
 
-  if args.size > 4
-    raise Puppet::ParseError, 'Too many arguments received in ldapquery()'
-  end
-
-  filter, attributes, base, scope = args
-
-  attributes ||= []
-  base ||= Puppet[:ldapbase]
-  scope ||= 'sub'
-
-  return PuppetX::LDAPquery.new(filter, attributes, base, scope).results
+	# Runs a query against LDAP
+	# @param [String] filter A standard (rfc4515) LDAP search filter.
+	# @param [Array[String]] attributes A list of attributes to return from the search.
+	# @param [String] base The LDAP base DN to search (defaults to puppet config value of 'ldapbase').
+	# @param [String] scope The scope for the LDAP search (base/one/sub).
+	# @return [Hash]
+	# @example
+	#	ldapquery('(objectClass=posixAccount)', [ 'uid' ])
+	dispatch :doquery do
+		required_param 'String', :filter
+		optional_param 'Array[String]', :attributes
+		optional_param 'String', :base
+		optional_param 'Ldapscope', :scope
+		return_type 'Hash'
+	end
+	def doquery(filter, attributes = [], base = Puppet[:ldapbase], scope = 'sub') 
+		return PuppetX::LDAPquery.new(filter, attributes, base, scope).results
+	end
 end
