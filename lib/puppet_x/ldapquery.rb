@@ -28,10 +28,9 @@ module PuppetX
       end
     end
 
-    def ldap_config
+    def ldap_config(String host)
       # Load the configuration variables from Puppet
       required_vars = [
-        :ldapserver,
         :ldapport
       ]
 
@@ -41,7 +40,6 @@ module PuppetX
         end
       end
 
-      host = Puppet[:ldapserver]
       port = Puppet[:ldapport]
 
       if Puppet[:ldapuser] && Puppet[:ldappassword]
@@ -79,37 +77,65 @@ module PuppetX
       # Query the LDAP server for attributes using the filter
       #
       # Returns: An array of Net::LDAP::Entry objects
-      conf = ldap_config
-
-      start_time = Time.now
-      ldap = Net::LDAP.new(conf)
-
-      search_args = {
-        base: @base,
-        attributes: @attributes,
-        scope: @scope,
-        time: 10
-      }
-
-      if @filter && !@filter.empty?
-        ldapfilter = Net::LDAP::Filter.construct(@filter)
-        search_args[:filter] = ldapfilter
+      unless Puppet[:ldapserver]
+        raise Puppet::ParseError, "Missing required setting 'ldapserver' in puppet.conf"
       end
 
-      entries = []
+      servers = Puppet[:ldapserver]
+      hosts = Array.new
+      if servers.count(",") > 0
+        hosts = servers.split(",")
+      else
+        hosts.push servers
+      end
 
-      begin
-        ldap.search(search_args) do |entry|
-          entries << entry
+      $connect_success = false
+      while !$connect_success
+        for host in hosts
+          Puppet.debug("Attempting LDAP connection to server: #{host}")
+          conf = ldap_config(host)
+
+          start_time = Time.now
+          ldap = Net::LDAP.new(conf)
+          if ldap.bind
+            $connect_success = true
+
+            search_args = {
+              base: @base,
+              attributes: @attributes,
+              scope: @scope,
+              time: 10
+            }
+
+            if @filter && !@filter.empty?
+              ldapfilter = Net::LDAP::Filter.construct(@filter)
+              search_args[:filter] = ldapfilter
+            end
+
+            entries = []
+
+            begin
+              ldap.search(search_args) do |entry|
+                entries << entry
+              end
+              end_time = Time.now
+              time_delta = format('%.3f', end_time - start_time)
+
+              Puppet.debug("ldapquery(): Searching #{@base} for #{@attributes} using #{@filter} took #{time_delta} seconds and returned #{entries.length} results")
+              return entries
+            rescue Net::LDAP::LdapError => e
+              Puppet.debug("There was an error searching LDAP #{e.message}")
+              Puppet.debug('Returning false')
+              return false
+            end
+          else
+            p ldap.get_operation_result
+            Puppet.debug("Connection result to server #{host}: (#{ldap.get_operation_result.code}) #{ldap.get_operation_result.message}")
+          end
         end
-        end_time = Time.now
-        time_delta = format('%.3f', end_time - start_time)
-
-        Puppet.debug("ldapquery(): Searching #{@base} for #{@attributes} using #{@filter} took #{time_delta} seconds and returned #{entries.length} results")
-        return entries
-      rescue Net::LDAP::LdapError => e
-        Puppet.debug("There was an error searching LDAP #{e.message}")
-        Puppet.debug('Returning false')
+      end
+      if !$connect_success
+        Puppet.debug("There was an error connecting to LDAP")
         return false
       end
     end
