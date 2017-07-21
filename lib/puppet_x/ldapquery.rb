@@ -141,6 +141,7 @@ module PuppetX
     end
 
     def parse_entries
+      results = Hash.new
       data = []
       entries.each do |entry|
         entry_data = {}
@@ -155,7 +156,8 @@ module PuppetX
         data << entry_data
       end
       Puppet.debug(data)
-      data
+      results['data'] = data
+      results
     end
 
     def results

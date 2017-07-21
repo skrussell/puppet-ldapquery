@@ -6,10 +6,8 @@
 # @example more complex query for ssh public keys
 #   ldapquery('(&(objectClass=ldapPublicKey)(sshPublicKey=*)(objectClass=posixAccount))', ['uid', 'sshPublicKey'])
 #
-require_relative '../../../puppet_x/ldapquery'
-
-Puppet::Functions.create_function(:'ldapquery') do
-	confine :feature => :netldap
+Puppet::Functions.create_function(:ldapquery) do
+	require_relative '../../puppet_x/ldapquery'
 
 	local_types do
 		type 'Ldapscope = Enum[base, one, sub]'
@@ -30,7 +28,19 @@ Puppet::Functions.create_function(:'ldapquery') do
 		optional_param 'Ldapscope', :scope
 		return_type 'Hash'
 	end
-	def doquery(filter, attributes = [], base = Puppet[:ldapbase], scope = 'sub') 
-		return PuppetX::LDAPquery.new(filter, attributes, base, scope).results
+	def doquery(filter, attributes = [], base = Puppet[:ldapbase], scope = 'sub')
+		result = Hash.new
+		begin
+			require 'net/ldap'
+			begin
+				result = PuppetX::LDAPquery.new(filter, attributes, base, scope).result
+			rescue
+				result['result'] = 'error'
+			end
+		rescue LoadError => e
+			raise unless e.message =~ /net\/ldap/
+			Puppet.notice('Missing net/ldap gem required for ldapquery() function')
+		end
+		return result
 	end
 end
