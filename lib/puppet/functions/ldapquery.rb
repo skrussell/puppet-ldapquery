@@ -37,7 +37,7 @@ Puppet::Functions.create_function(:ldapquery) do
 			if query.connect
 				result['status'] = 'connected'
 				begin
-					data = PuppetX::LDAPquery.new(filter, attributes, base, scope).results
+					data = query.results
 					result['data'] = data
 					result['success'] = true
 				rescue => e
