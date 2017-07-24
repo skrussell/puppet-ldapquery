@@ -10,7 +10,7 @@ Puppet::Functions.create_function(:ldapquery) do
 	require_relative '../../puppet_x/ldapquery'
 
 	local_types do
-		type 'Ldapscope = Enum[base, one, sub]'
+		type 'Ldapscope = Enum[base,one,sub]'
 	end
 
 	# Runs a query against LDAP
@@ -30,16 +30,22 @@ Puppet::Functions.create_function(:ldapquery) do
 	end
 	def doquery(filter, attributes = [], base = Puppet[:ldapbase], scope = 'sub')
 		result = Hash.new
+		result['success'] = false
 		begin
 			require 'net/ldap'
-			begin
-				result = PuppetX::LDAPquery.new(filter, attributes, base, scope).result
-			rescue
-				result['result'] = 'error'
+			query = PuppetX::LDAPquery.new(filter, attributes, base, scope)
+			if query.connect
+				result['status'] = 'connected'
+#				data = PuppetX::LDAPquery.new(filter, attributes, base, scope).results
+#				result['data'] = data
+				result['success'] = true
+			else
+				result['status'] = 'connection_error'
 			end
 		rescue LoadError => e
 			raise unless e.message =~ /net\/ldap/
 			Puppet.notice('Missing net/ldap gem required for ldapquery() function')
+			result['status'] = 'no_ldap_module'
 		end
 		return result
 	end

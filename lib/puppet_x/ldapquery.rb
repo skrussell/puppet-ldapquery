@@ -47,9 +47,6 @@ module PuppetX
         password = Puppet[:ldappassword]
       end
 
-      tls = Puppet[:ldaptls]
-      ca_file = "#{Puppet[:confdir]}/ldap_ca.pem"
-
       conf = {
         host: host,
         port: port
@@ -63,85 +60,73 @@ module PuppetX
         }
       end
 
+      tls = Puppet[:ldaptls]
       if tls
-        conf[:encryption] = {
-          method: :simple_tls,
-          tls_options: { ca_file: ca_file }
-        }
+        tls_method = Puppet[:ldaptlsmethod]
+        if tls_method
+            unless tls_method == 'start_tls' or tls_method == 'simple_tls'
+                raise Puppet::ParseError, "LDAP setting 'ldaptlsmethod' must be one of 'start_tls' or 'simple_tls'"
+            end
+            if Puppet[:ldaptlsmethod] == 'start_tls'
+                method = :start_tls
+            else
+                method = :simple_tls
+            end
+        else
+            if port == 389
+                method = :start_tls
+            elsif port == 636
+                method = :simple_tls
+            end
+        end
+        ca_file = "#{Puppet[:confdir]}/ldap_ca.pem"
+        if (File.file?(ca_file) || File.file?(ca_file))
+            conf[:encryption] = {
+              method: method,
+              tls_options: { ca_file: ca_file }
+            }
+        else
+            raise Puppet::ParseError, "'#{ca_file}' does not exist!"
+        end
       end
 
       conf
     end
 
     def entries
-      # Query the LDAP server for attributes using the filter
-      #
-      # Returns: An array of Net::LDAP::Entry objects
-      unless Puppet[:ldapserver]
-        raise Puppet::ParseError, "Missing required setting 'ldapserver' in puppet.conf"
-      end
+        # Query the LDAP server for attributes using the filter
+        #
+        # Returns: An array of Net::LDAP::Entry objects
+        search_args = {
+          base: @base,
+          attributes: @attributes,
+          scope: @scope,
+          time: 10
+        }
 
-      servers = Puppet[:ldapserver]
-      hosts = Array.new
-      if servers.count(",") > 0
-        hosts = servers.split(",")
-      else
-        hosts.push servers
-      end
-
-      $connect_success = false
-      while !$connect_success
-        for host in hosts
-          Puppet.debug("Attempting LDAP connection to server: #{host}")
-          conf = ldap_config(host)
-
-          start_time = Time.now
-          ldap = Net::LDAP.new(conf)
-          if ldap.bind
-            $connect_success = true
-
-            search_args = {
-              base: @base,
-              attributes: @attributes,
-              scope: @scope,
-              time: 10
-            }
-
-            if @filter && !@filter.empty?
-              ldapfilter = Net::LDAP::Filter.construct(@filter)
-              search_args[:filter] = ldapfilter
-            end
-
-            entries = []
-
-            begin
-              ldap.search(search_args) do |entry|
-                entries << entry
-              end
-              end_time = Time.now
-              time_delta = format('%.3f', end_time - start_time)
-
-              Puppet.debug("ldapquery(): Searching #{@base} for #{@attributes} using #{@filter} took #{time_delta} seconds and returned #{entries.length} results")
-              return entries
-            rescue Net::LDAP::LdapError => e
-              Puppet.debug("There was an error searching LDAP #{e.message}")
-              Puppet.debug('Returning false')
-              return false
-            end
-          else
-            p ldap.get_operation_result
-            Puppet.debug("Connection result to server #{host}: (#{ldap.get_operation_result.code}) #{ldap.get_operation_result.message}")
-          end
+        if @filter && !@filter.empty?
+            ldapfilter = Net::LDAP::Filter.construct(@filter)
+            search_args[:filter] = ldapfilter
         end
-      end
-      if !$connect_success
-        Puppet.debug("There was an error connecting to LDAP")
-        return false
-      end
+
+        entries = []
+
+        begin
+            start_time = Time.now
+            @ldap.search(search_args) do |entry|
+                entries << entry
+            end
+            end_time = Time.now
+            time_delta = format('%.3f', end_time - start_time)
+
+            Puppet.debug("ldapquery(): Searching #{@base} for #{@attributes} using #{@filter} took #{time_delta} seconds and returned #{entries.length} results")
+        rescue Net::LDAP::LdapError => e
+            Puppet.debug("There was an error searching LDAP #{e.message}")
+        end
+        return entries
     end
 
     def parse_entries
-      results = Hash.new
       data = []
       entries.each do |entry|
         entry_data = {}
@@ -156,12 +141,44 @@ module PuppetX
         data << entry_data
       end
       Puppet.debug(data)
-      results['data'] = data
-      results
+      data
+    end
+
+    def connect
+        connect_success = false
+        unless Puppet[:ldapserver]
+            raise Puppet::ParseError, "Missing required setting 'ldapserver' in puppet.conf"
+        end
+        servers = Puppet[:ldapserver]
+        hosts = []
+        if servers.count(",") > 0
+            hosts = servers.split(",")
+        else
+            hosts.push servers
+        end
+
+        for host in hosts
+            Puppet.debug("Attempting LDAP connection to server: #{host}")
+            conf = ldap_config(host)
+            ldap = Net::LDAP.new(conf)
+            begin
+                if ldap.bind
+                    connect_success = true
+                    @ldap = ldap
+                    break
+                else
+                    Puppet.info "Connection result to server #{host}: (#{ldap.get_operation_result.code}) #{ldap.get_operation_result.message}"
+                end
+#            rescue Net::LDAP::Error => e
+            rescue => e
+                Puppet.info("An error occured when trying to connect to LDAP host: #{host}, Class: #{e.class}, #{e.message}")
+            end
+        end
+        connect_success
     end
 
     def results
-      parse_entries
+        parse_entries
     end
   end
 end
