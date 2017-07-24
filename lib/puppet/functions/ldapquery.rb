@@ -39,6 +39,7 @@ Puppet::Functions.create_function(:ldapquery) do
 				begin
 					data = query.results
 					result['data'] = data
+					result['records'] = data.size
 					result['success'] = true
 				rescue => e
 					Puppet.notice("An error occured whilst fetching the LDAP data: (#{e.class}) '#{e.message}'")
