@@ -36,16 +36,20 @@ Puppet::Functions.create_function(:ldapquery) do
 			query = PuppetX::LDAPquery.new(filter, attributes, base, scope)
 			if query.connect
 				result['status'] = 'connected'
-#				data = PuppetX::LDAPquery.new(filter, attributes, base, scope).results
-#				result['data'] = data
-				result['success'] = true
+				begin
+					data = PuppetX::LDAPquery.new(filter, attributes, base, scope).results
+					result['data'] = data
+					result['success'] = true
+				rescue => e
+					Puppet.notice("An error occured whilst fetching the LDAP data: (#{e.class}) '#{e.message}'")
+				end
 			else
 				result['status'] = 'connection_error'
 			end
 		rescue LoadError => e
 			raise unless e.message =~ /net\/ldap/
 			Puppet.notice('Missing net/ldap gem required for ldapquery() function')
-			result['status'] = 'no_ldap_module'
+			result['status'] = 'no_netldap_module'
 		end
 		return result
 	end
