@@ -56,7 +56,7 @@ module PuppetX
       conf = {
         host: host,
         port: port,
-		connect_timeout: connection_timeout
+        connect_timeout: connection_timeout
       }
 
       if (user != '') && (password != '')
