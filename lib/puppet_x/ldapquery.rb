@@ -47,9 +47,16 @@ module PuppetX
         password = Puppet[:ldappassword]
       end
 
+      if Puppet[:ldap_connect_timeout]
+        connection_timeout = Puppet[:ldapconnectiontimeout]
+      else
+        connection_timeout = 3
+      end
+
       conf = {
         host: host,
-        port: port
+        port: port,
+		connect_timeout: connection_timeout
       }
 
       if (user != '') && (password != '')
