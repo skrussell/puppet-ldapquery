@@ -47,7 +47,7 @@ module PuppetX
         password = Puppet[:ldappassword]
       end
 
-      if Puppet[:ldap_connect_timeout]
+      if Puppet[:ldapconnecttimeout]
         connection_timeout = Puppet[:ldapconnectiontimeout]
       else
         connection_timeout = 3
@@ -87,13 +87,13 @@ module PuppetX
             end
         end
         ca_file = "#{Puppet[:confdir]}/ldap_ca.pem"
-        if (File.file?(ca_file) || File.file?(ca_file))
+        if (File.file?(ca_file) || File.symlink?(ca_file))
             conf[:encryption] = {
               method: method,
               tls_options: { ca_file: ca_file }
             }
         else
-            raise Puppet::ParseError, "'#{ca_file}' does not exist!"
+			raise Puppet::ParseError, "'#{ca_file}' does not exist!"
         end
       end
 
